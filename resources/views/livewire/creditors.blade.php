@@ -20,6 +20,7 @@ new class extends Component {
     public $showAddLoanModal = false;
     public $showEditLoanModal = false;
     public $showDeleteConfirm = false;
+    public $showAddCreditorModal = false;
     public $showEditCreditorModal = false;
     public $showDeleteCreditorConfirm = false;
 
@@ -287,6 +288,31 @@ new class extends Component {
         $this->showEditCreditorModal = true;
     }
     
+    public function openAddCreditorModal()
+    {
+        $this->resetCreditorForm();
+        $this->showAddCreditorModal = true;
+    }
+    
+    public function createCreditor()
+    {
+        $this->validate([
+            'creditorName' => 'required|string|max:255',
+            'creditorType' => 'required|string|max:255',
+        ]);
+        
+        Creditor::create([
+            'user_id' => auth()->id(),
+            'name' => $this->creditorName,
+            'type' => $this->creditorType,
+        ]);
+        
+        $this->resetCreditorForm();
+        $this->showAddCreditorModal = false;
+        $this->loadData();
+        $this->calculateStrategy();
+    }
+    
     public function saveCreditor()
     {
         $this->validate([
@@ -372,20 +398,182 @@ new class extends Component {
 
                 <div>
                     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Strategy</label>
-                    <select 
-                        wire:model.live="strategy" 
-                        class="w-full px-4 py-3 bg-white/60 dark:bg-zinc-700/60 border border-zinc-200 dark:border-zinc-600 rounded-xl text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500 transition-all backdrop-blur-xl"
-                    >
-                        <optgroup label="Popular Strategies">
-                            <option value="snowball">💎 Snowball - Smallest balance first (Quick wins!)</option>
-                            <option value="avalanche">🏔️ Avalanche - Highest interest first (Save money!)</option>
-                        </optgroup>
-                        <optgroup label="Alternative Strategies">
-                            <option value="highest_balance">🎯 Highest Balance - Largest debt first</option>
-                            <option value="lowest_payment">⚡ Lowest Payment - Smallest minimum payment first</option>
-                            <option value="highest_payment">💪 Highest Payment - Largest minimum payment first</option>
-                        </optgroup>
-                    </select>
+                    
+                    <div x-data="{
+                        selectOpen: false,
+                        selectedItem: @entangle('strategy'),
+                        selectableItems: [
+                            {
+                                title: 'Snowball - Smallest balance first (Quick wins!)',
+                                value: 'snowball',
+                                disabled: false
+                            },
+                            {
+                                title: 'Avalanche - Highest interest first (Save money!)',
+                                value: 'avalanche',
+                                disabled: false
+                            },
+                            {
+                                title: 'Highest Balance - Largest debt first',
+                                value: 'highest_balance',
+                                disabled: false
+                            },
+                            {
+                                title: 'Lowest Payment - Smallest minimum payment first',
+                                value: 'lowest_payment',
+                                disabled: false
+                            },
+                            {
+                                title: 'Highest Payment - Largest minimum payment first',
+                                value: 'highest_payment',
+                                disabled: false
+                            }
+                        ],
+                        selectableItemActive: null,
+                        selectId: $id('select'),
+                        selectKeydownValue: '',
+                        selectKeydownTimeout: 1000,
+                        selectKeydownClearTimeout: null,
+                        selectDropdownPosition: 'bottom',
+                        getSelectedItemTitle() {
+                            let item = this.selectableItems.find(i => i.value === this.selectedItem);
+                            return item ? item.title : 'Select Strategy';
+                        },
+                        selectableItemIsActive(item) {
+                            return this.selectableItemActive && this.selectableItemActive.value==item.value;
+                        },
+                        selectableItemActiveNext(){
+                            let index = this.selectableItems.indexOf(this.selectableItemActive);
+                            if(index < this.selectableItems.length-1){
+                                this.selectableItemActive = this.selectableItems[index+1];
+                                this.selectScrollToActiveItem();
+                            }
+                        },
+                        selectableItemActivePrevious(){
+                            let index = this.selectableItems.indexOf(this.selectableItemActive);
+                            if(index > 0){
+                                this.selectableItemActive = this.selectableItems[index-1];
+                                this.selectScrollToActiveItem();
+                            }
+                        },
+                        selectScrollToActiveItem(){
+                            if(this.selectableItemActive){
+                                activeElement = document.getElementById(this.selectableItemActive.value + '-' + this.selectId)
+                                newScrollPos = (activeElement.offsetTop + activeElement.offsetHeight) - this.$refs.selectableItemsList.offsetHeight;
+                                if(newScrollPos > 0){
+                                    this.$refs.selectableItemsList.scrollTop=newScrollPos;
+                                } else {
+                                    this.$refs.selectableItemsList.scrollTop=0;
+                                }
+                            }
+                        },
+                        selectKeydown(event){
+                            if (event.keyCode >= 65 && event.keyCode <= 90) {
+                                this.selectKeydownValue += event.key;
+                                selectedItemBestMatch = this.selectItemsFindBestMatch();
+                                if(selectedItemBestMatch){
+                                    if(this.selectOpen){
+                                        this.selectableItemActive = selectedItemBestMatch;
+                                        this.selectScrollToActiveItem();
+                                    } else {
+                                        this.selectedItem = selectedItemBestMatch.value;
+                                        this.selectableItemActive = selectedItemBestMatch;
+                                    }
+                                }
+                                
+                                if(this.selectKeydownValue != ''){
+                                    clearTimeout(this.selectKeydownClearTimeout);
+                                    this.selectKeydownClearTimeout = setTimeout(() => {
+                                        this.selectKeydownValue = '';
+                                    }, this.selectKeydownTimeout);
+                                }
+                            }
+                        },
+                        selectItemsFindBestMatch(){
+                            typedValue = this.selectKeydownValue.toLowerCase();
+                            var bestMatch = null;
+                            var bestMatchIndex = -1;
+                            for (var i = 0; i < this.selectableItems.length; i++) {
+                                var title = this.selectableItems[i].title.toLowerCase();
+                                var index = title.indexOf(typedValue);
+                                if (index > -1 && (bestMatchIndex == -1 || index < bestMatchIndex) && !this.selectableItems[i].disabled) {
+                                    bestMatch = this.selectableItems[i];
+                                    bestMatchIndex = index;
+                                }
+                            }
+                            return bestMatch;
+                        },
+                        selectPositionUpdate(){
+                            selectDropdownBottomPos = this.$refs.selectButton.getBoundingClientRect().top + this.$refs.selectButton.offsetHeight + parseInt(window.getComputedStyle(this.$refs.selectableItemsList).maxHeight);
+                            if(window.innerHeight < selectDropdownBottomPos){
+                                this.selectDropdownPosition = 'top';
+                            } else {
+                                this.selectDropdownPosition = 'bottom';
+                            }
+                        }
+                    }"
+                    x-init="
+                        $watch('selectOpen', function(){
+                            if(!selectedItem){ 
+                                selectableItemActive=selectableItems[0];
+                            } else {
+                                selectableItemActive=selectableItems.find(i => i.value === selectedItem);
+                            }
+                            setTimeout(function(){
+                                selectScrollToActiveItem();
+                            }, 10);
+                            selectPositionUpdate();
+                            window.addEventListener('resize', (event) => { selectPositionUpdate(); });
+                        });
+                    "
+                    @keydown.escape="if(selectOpen){ selectOpen=false; }"
+                    @keydown.down="if(selectOpen){ selectableItemActiveNext(); } else { selectOpen=true; } event.preventDefault();"
+                    @keydown.up="if(selectOpen){ selectableItemActivePrevious(); } else { selectOpen=true; } event.preventDefault();"
+                    @keydown.enter="selectedItem=selectableItemActive.value; selectOpen=false;"
+                    @keydown="selectKeydown($event);"
+                    class="relative w-full">
+
+                        <button x-ref="selectButton" @click="selectOpen=!selectOpen"
+                            :class="{ 'ring-2 ring-offset-2 ring-zinc-400 dark:ring-zinc-500' : !selectOpen }"
+                            class="relative min-h-[48px] flex items-center justify-between w-full py-3 pl-4 pr-10 text-left bg-white/60 dark:bg-zinc-700/60 border rounded-xl shadow-sm cursor-default border-zinc-200 dark:border-zinc-600 focus:outline-none backdrop-blur-xl text-sm text-zinc-900 dark:text-zinc-50"
+                            type="button">
+                            <span x-text="getSelectedItemTitle()" class="truncate"></span>
+                            <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="w-5 h-5 text-zinc-400 dark:text-zinc-500">
+                                    <path fill-rule="evenodd" d="M10 3a.75.75 0 01.55.24l3.25 3.5a.75.75 0 11-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 01-1.1-1.02l3.25-3.5A.75.75 0 0110 3zm-3.76 9.2a.75.75 0 011.06.04l2.7 2.908 2.7-2.908a.75.75 0 111.1 1.02l-3.25 3.5a.75.75 0 01-1.1 0l-3.25-3.5a.75.75 0 01.04-1.06z" clip-rule="evenodd"></path>
+                                </svg>
+                            </span>
+                        </button>
+
+                        <ul x-show="selectOpen"
+                            x-ref="selectableItemsList"
+                            @click.away="selectOpen = false"
+                            x-transition:enter="transition ease-out duration-50"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100"
+                            :class="{ 'bottom-0 mb-14' : selectDropdownPosition == 'top', 'top-0 mt-1' : selectDropdownPosition == 'bottom' }"
+                            class="absolute z-10 w-full py-1 overflow-auto text-sm bg-white dark:bg-zinc-700 rounded-xl shadow-lg max-h-56 ring-1 ring-black ring-opacity-5 dark:ring-zinc-600 focus:outline-none backdrop-blur-xl"
+                            style="display: none;">
+
+                            <template x-for="item in selectableItems" :key="item.value">
+                                <li 
+                                    @click="selectedItem=item.value; selectOpen=false; $refs.selectButton.focus();"
+                                    :id="item.value + '-' + selectId"
+                                    :data-disabled="item.disabled"
+                                    :class="{ 'bg-zinc-100 dark:bg-zinc-600 text-zinc-900 dark:text-zinc-50' : selectableItemIsActive(item), '' : !selectableItemIsActive(item) }"
+                                    @mousemove="selectableItemActive=item"
+                                    class="relative flex items-center h-full py-2.5 pl-10 pr-4 text-zinc-700 dark:text-zinc-300 cursor-default select-none data-[disabled]:opacity-50 data-[disabled]:pointer-events-none hover:bg-zinc-50 dark:hover:bg-zinc-600/50">
+                                    <svg x-show="selectedItem==item.value" class="absolute left-0 w-4 h-4 ml-3 stroke-current text-zinc-400 dark:text-zinc-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    <span class="block font-medium truncate" x-text="item.title"></span>
+                                </li>
+                            </template>
+
+                        </ul>
+
+                    </div>
+                    
                     <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                         @if($strategy === 'snowball')
                             Focus on quick wins by paying off smallest debts first - great for motivation!
@@ -516,6 +704,19 @@ new class extends Component {
 
             <!-- Tab Content: Creditors & Loans -->
             @if ($activeTab === 'creditors')
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Your Creditors</h2>
+                    <button 
+                        wire:click="openAddCreditorModal" 
+                        class="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors text-sm font-medium shadow-md"
+                    >
+                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Add Creditor
+                    </button>
+                </div>
+                
                 @if ($creditors->isEmpty())
                     <div class="text-center py-12">
                         <svg class="w-16 h-16 mx-auto text-zinc-300 dark:text-zinc-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -1051,6 +1252,55 @@ new class extends Component {
                     class="px-6 py-2.5 bg-red-600 dark:bg-red-500 text-white rounded-xl hover:bg-red-700 dark:hover:bg-red-600 transition-all font-medium shadow-lg"
                 >
                     Delete Loan
+                </button>
+            </div>
+        </div>
+    </x-modal>
+    
+    <!-- Add Creditor Modal -->
+    <x-modal wire:model="showAddCreditorModal">
+        <div class="p-6 space-y-5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-zinc-600 dark:text-zinc-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Add New Creditor</h2>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Creditor Name</label>
+                <input 
+                    type="text" 
+                    wire:model="creditorName" 
+                    class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-xl text-zinc-900 dark:text-zinc-50 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500 transition-all"
+                    placeholder="Enter creditor name"
+                >
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Type</label>
+                <input 
+                    type="text" 
+                    wire:model="creditorType" 
+                    class="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 rounded-xl text-zinc-900 dark:text-zinc-50 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500 transition-all"
+                    placeholder="e.g., Bank, Credit Card, Personal"
+                >
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+                <button 
+                    wire:click="$set('showAddCreditorModal', false)" 
+                    class="px-6 py-2.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-all font-medium"
+                >
+                    Cancel
+                </button>
+                <button 
+                    wire:click="createCreditor" 
+                    class="px-6 py-2.5 bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 rounded-xl hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all font-medium shadow-lg"
+                >
+                    Create Creditor
                 </button>
             </div>
         </div>
